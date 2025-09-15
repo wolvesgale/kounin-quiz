@@ -219,35 +219,33 @@ function renderQuizList(list, sub) {
     var exp = document.createElement("div");
     exp.className = "explain muted";
     card.appendChild(exp);
+    // 画像（任意）
+    if (q.img_url) {
+      var img = document.createElement("img");
+      img.src = q.img_url;
+      img.alt = "illustration";
+      img.style.maxWidth = "100%";
+      img.style.borderRadius = "8px";
+      img.style.marginTop = "6px";
+      card.appendChild(img);
+    }
+
+    // もっと詳しい解説（任意）
+    if (q.explanation_long) {
+      var more = document.createElement("details");
+      var sum = document.createElement("summary");
+      sum.textContent = "もっと詳しい解説（中3向け）";
+      more.appendChild(sum);
+      var p = document.createElement("div");
+      p.textContent = q.explanation_long;
+      p.style.marginTop = "6px";
+      more.appendChild(p);
+      card.appendChild(more);
+    }
 
     cont.appendChild(card);
   });
 }
-
-// 画像（任意）
-if (q.img_url) {
-  var img = document.createElement("img");
-  img.src = q.img_url;
-  img.alt = "illustration";
-  img.style.maxWidth = "100%";
-  img.style.borderRadius = "8px";
-  img.style.marginTop = "6px";
-  card.appendChild(img);
-}
-
-// もっと詳しく（任意）
-if (q.explanation_long) {
-  var more = document.createElement("details");
-  var sum = document.createElement("summary");
-  sum.textContent = "もっと詳しい解説（中3向け）";
-  more.appendChild(sum);
-  var p = document.createElement("div");
-  p.textContent = q.explanation_long;
-  p.style.marginTop = "6px";
-  more.appendChild(p);
-  card.appendChild(more);
-}
-
 
 function renderWeak() {
   var arr = loadWeak();
