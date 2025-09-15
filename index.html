@@ -1,0 +1,359 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>高卒認定 学習クイズ（サーバーレス）</title>
+  <style>
+    :root{
+      --bg:#0b1020; --card:#121a2f; --ink:#e7eefc; --muted:#a8b3cf; --accent:#6ee7ff; --ok:#22c55e; --ng:#ef4444;
+      --border:#2a355a; --chip:#121b36; --chip2:#0e1530; --dash:#2a355a; --table:#223058;
+      --base-font:16px;
+    }
+    [data-theme="light"]{
+      --bg:#f7fbff; --card:#ffffff; --ink:#0d1b2a; --muted:#4b5563; --accent:#0284c7; --ok:#16a34a; --ng:#dc2626;
+      --border:#d0d7e2; --chip:#f1f5f9; --chip2:#eef2f7; --dash:#c9d3e4; --table:#e5eaf2;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial; background:var(--bg); color:var(--ink); font-size:var(--base-font)}
+    header{position:sticky;top:0;z-index:2;background:linear-gradient(180deg, var(--bg) 70%, transparent);}
+    .wrap{max-width:960px;margin:0 auto;padding:16px}
+    h1{font-size:20px;margin:8px 0 12px}
+    .bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+    input[type="url"],input[type="text"],select,input[type="number"]{flex:1;min-width:180px;background:var(--chip2);border:1px solid var(--border);color:var(--ink);padding:10px 12px;border-radius:10px}
+    input::placeholder{color:var(--muted)}
+    .btn{background:#1b2444;border:1px solid var(--border);color:var(--ink);padding:10px 14px;border-radius:10px;cursor:pointer}
+    [data-theme="light"] .btn{background:#e8eef8;color:#0d1b2a}
+    .btn:hover{border-color:#3b4b7a}
+    .btn-accent{background:linear-gradient(90deg,#0ea5e9,#06b6d4);border:none;color:white}
+    .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-top:12px}
+    .card{background:var(--card);border:1px solid var(--border);border-radius:14px;padding:14px}
+    .pill{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--border);background:var(--chip);color:var(--ink);padding:8px 12px;border-radius:999px;cursor:pointer}
+    .pill.secondary{background:var(--chip2)}
+    .pill.ok{border-color:#124e2d;background:#0c271a;color:#d1fae5}
+    .pill.ng{border-color:#5d2020;background:#2a0f10;color:#fee2e2}
+    .muted{color:var(--muted)}
+    .choices{display:grid;gap:8px;margin-top:10px}
+    .choice{padding:10px 12px;border-radius:10px;background:var(--chip2);border:1px solid var(--border);cursor:pointer}
+    .choice.correct{border-color:#14532d;background:#0a1f12;color:#d1fae5}
+    .choice.wrong{border-color:#7f1d1d;background:#2a0f10;color:#fee2e2}
+    .explain{margin-top:10px;padding:12px;border-radius:10px;background:var(--chip2);border:1px dashed var(--dash)}
+    .footer{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+    .hidden{display:none}
+    .tag{display:inline-block;padding:2px 8px;border-radius:999px;background:#102046;border:1px solid var(--border);color:#c2d7ff;font-size:12px}
+    [data-theme="light"] .tag{background:#e8eef8;color:#083344}
+    .table{width:100%;border-collapse:collapse;margin-top:8px}
+    .table th,.table td{border-bottom:1px solid var(--table);padding:8px;vertical-align:top}
+    .right{display:flex;gap:8px;align-items:center;margin-left:auto}
+    .kbd{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--chip2);border:1px solid var(--border);border-radius:6px;padding:2px 6px;color:#64748b}
+    .small{font-size:12px}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap">
+      <h1>高卒認定 学習クイズ（サーバーレス）</h1>
+      <div class="bar">
+        <input id="csvUrl" type="url" placeholder="Googleスプレッドシートの共有URL または CSV公開URL を貼る" />
+        <input id="sheetName" type="text" placeholder="（任意）データ名：例 高認v1" />
+        <button class="btn btn-accent" id="loadBtn">読み込む</button>
+        <label class="pill"><input type="file" id="csvFile" accept=".csv" hidden> CSVファイル</label>
+        <div class="right">
+          <select id="orderMode">
+            <option value="fixed">順番どおり</option>
+            <option value="random">ランダム</option>
+          </select>
+          <input id="limitCount" type="number" min="0" step="1" placeholder="出題数（0=全件）" style="max-width:150px" />
+          <button class="btn" id="fontSm">A−</button>
+          <button class="btn" id="fontLg">A＋</button>
+          <button class="btn" id="themeToggle">明るく/暗く</button>
+          <button class="btn" id="btnHome">TOP</button>
+          <button class="btn" id="btnWeak">苦手一覧</button>
+        </div>
+      </div>
+      <div class="small muted" style="margin-top:6px">
+        共有URLでもOKです。自動で <span class="kbd">/export?format=csv</span> に変換を試みます。必要に応じて「ウェブに公開」を有効化してください。
+      </div>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section id="homeView" class="card">
+      <div class="muted">科目を選択してください（CSVの <span class="kbd">subject</span> 列から重複排除して自動生成）</div>
+      <div id="subjectGrid" class="grid" style="margin-top:10px"></div>
+    </section>
+
+    <section id="quizView" class="hidden">
+      <div class="card" id="quizCard">
+        <div class="muted" id="quizMeta"></div>
+        <h2 id="qTitle" style="margin:8px 0 6px;font-size:18px"></h2>
+        <div id="unitTag" class="tag"></div>
+        <div id="choices" class="choices" style="margin-top:10px"></div>
+        <div id="explain" class="explain hidden"></div>
+        <div class="footer">
+          <label class="pill secondary" id="toggleWeak"><input type="checkbox" id="weakChk"> この問題を苦手に追加</label>
+          <button class="btn" id="prevBtn">前へ</button>
+          <button class="btn" id="nextBtn">次へ</button>
+          <div class="right"><span id="progress" class="muted small"></span></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="weakView" class="hidden card">
+      <h2 style="margin-top:0">苦手一覧</h2>
+      <div class="footer">
+        <select id="weakFilter" style="max-width:220px"><option value="">（すべての科目）</option></select>
+        <button class="btn" id="copyPrompt">弱点補強プロンプトをコピー</button>
+        <button class="btn" id="exportWeakCsv">CSVとして保存</button>
+        <button class="btn" id="clearWeak">苦手一覧を空にする</button>
+      </div>
+      <table class="table" id="weakTable">
+        <thead><tr><th>subject</th><th>unit</th><th>question</th><th>answer</th><th>explanation</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </section>
+  </main>
+
+  <script>
+    // --- CSV パーサ ---
+    function parseCSV(text){
+      const rows=[]; let i=0, cur=[], cell='', inQ=false;
+      while(i<text.length){
+        const ch=text[i];
+        if(inQ){
+          if(ch==='"'){
+            if(text[i+1]==='"'){ cell+='"'; i+=2; continue; }
+            inQ=false; i++; continue;
+          } else { cell+=ch; i++; continue; }
+        } else {
+          if(ch==='"'){ inQ=true; i++; continue; }
+          if(ch===','){ cur.push(cell); cell=''; i++; continue; }
+          if(ch==='
+'){ cur.push(cell); rows.push(cur); cur=[]; cell=''; i++; continue; }
+          if(ch==='
+'){ i++; continue; }
+          cell+=ch; i++;
+        }
+      }
+      if(cell.length||cur.length){ cur.push(cell); rows.push(cur); }
+      const header = rows.shift();
+      return rows.filter(r=>r.length>0 && r.some(x=>x!==''))
+                 .map(r=>Object.fromEntries(header.map((h,idx)=>[h.trim(), (r[idx]??'').trim()])));
+    }
+
+    // Googleシート共有URL→CSVエクスポートURL
+    function toCsvUrl(u){
+      try{
+        const url=new URL(u);
+        if(url.hostname.includes('docs.google.com') && url.pathname.includes('/spreadsheets/')){
+          const base = url.origin + url.pathname.replace(/\/edit.*$/, '');
+          const gid = url.searchParams.get('gid');
+          return base + '/export?format=csv' + (gid?('&gid='+gid):'');
+        }
+        return u;
+      }catch{ return u }
+    }
+
+    // --- 状態と設定 ---
+    const state={ data:[], subjects:[], bySubject:{}, curSubject:null, curIdx:0, weakKey:'weak:default', sheetName:'default', settingsKey:'settings:default', settings:{ order:'fixed', limit:0, theme:'dark', fontScale:1 } };
+
+    function setSheetName(name){
+      state.sheetName = (name||'').trim() || 'default';
+      state.weakKey = `weak:${state.sheetName}`;
+      state.settingsKey = `settings:${state.sheetName}`;
+      loadSettings(); applySettings();
+    }
+
+    // 設定の保存/読込
+    function loadSettings(){
+      try{ const s=JSON.parse(localStorage.getItem(state.settingsKey)||'{}'); Object.assign(state.settings, s); }catch{}
+      document.getElementById('orderMode').value=state.settings.order;
+      document.getElementById('limitCount').value=state.settings.limit||0;
+      applyTheme(state.settings.theme);
+      applyFont(state.settings.fontScale);
+    }
+    function saveSettings(){ localStorage.setItem(state.settingsKey, JSON.stringify(state.settings)); }
+
+    // テーマ/フォント
+    function applyTheme(t){ document.body.setAttribute('data-theme', t==='light'?'light':'dark'); state.settings.theme=t; saveSettings(); }
+    function applyFont(scale){
+      scale=Math.max(0.85, Math.min(1.4, scale||1));
+      document.documentElement.style.setProperty('--base-font', (16*scale)+'px');
+      state.settings.fontScale=scale; saveSettings();
+    }
+
+    // 苦手の保存
+    function loadWeak(){ try{ return JSON.parse(localStorage.getItem(state.weakKey)||'[]'); }catch{ return [] } }
+    function saveWeak(list){ localStorage.setItem(state.weakKey, JSON.stringify(list)); }
+
+    // 画面遷移
+    function renderHome(){
+      document.getElementById('homeView').classList.remove('hidden');
+      document.getElementById('quizView').classList.add('hidden');
+      document.getElementById('weakView').classList.add('hidden');
+      const grid=document.getElementById('subjectGrid');
+      grid.innerHTML='';
+      state.subjects.forEach(sub=>{
+        const btn=document.createElement('button'); btn.className='pill'; btn.textContent=sub; btn.onclick=()=>startSubject(sub); grid.appendChild(btn);
+      });
+      if(state.subjects.length===0){
+        const p=document.createElement('div'); p.className='muted'; p.textContent='CSVを読み込むと科目ボタンが並びます。'; grid.appendChild(p);
+      }
+    }
+
+    function startSubject(sub){
+      state.curSubject=sub; state.curIdx=0;
+      const all = state.bySubject[sub]||[];
+      let list = [...all];
+      if(state.settings.order==='random') list = shuffle(list);
+      const lim = Number(document.getElementById('limitCount').value||state.settings.limit||0);
+      if(lim>0) list = list.slice(0, lim);
+      state.bySubject[sub+'::__runtime'] = list; // 実出題リストを別キーに保存
+      document.getElementById('homeView').classList.add('hidden');
+      document.getElementById('weakView').classList.add('hidden');
+      document.getElementById('quizView').classList.remove('hidden');
+      showCurrent();
+    }
+
+    function getRuntimeList(){ return state.bySubject[state.curSubject+'::__runtime'] || state.bySubject[state.curSubject] || []; }
+
+    function showCurrent(){
+      const list=getRuntimeList();
+      const q=list[state.curIdx]; if(!q){ return }
+      document.getElementById('quizMeta').textContent=`${state.curSubject} ／ 全${list.length}問`;
+      document.getElementById('qTitle').textContent=q.question;
+      document.getElementById('unitTag').textContent=q.unit||'';
+      const chWrap=document.getElementById('choices'); chWrap.innerHTML='';
+      const ans=(q.answer||'').toUpperCase().trim();
+      const map={ A:q.choice_a, B:q.choice_b, C:q.choice_c, D:q.choice_d };
+      Object.entries(map).forEach(([k,txt])=>{
+        const b=document.createElement('button'); b.className='choice'; b.innerHTML=`<b>${k}</b>： ${txt??''}`;
+        b.onclick=()=>{
+          Array.from(chWrap.children).forEach(el=>el.disabled=true);
+          b.classList.add(k===ans?'correct':'wrong');
+          Array.from(chWrap.children).forEach(el=>{ if(el.textContent.startsWith(ans)) el.classList.add('correct'); });
+          const ex=document.getElementById('explain'); ex.classList.remove('hidden'); ex.textContent=q.explanation||'';
+          const weakChk=document.getElementById('weakChk'); if(k!==ans){ weakChk.checked=true; setWeak(q,true); }
+        };
+        chWrap.appendChild(b);
+      });
+      document.getElementById('explain').classList.add('hidden');
+      document.getElementById('explain').textContent='';
+      const weakChk=document.getElementById('weakChk'); weakChk.checked=isWeak(q);
+      document.getElementById('progress').textContent=`${state.curIdx+1} / ${list.length}`;
+    }
+
+    function isSameItem(a,b){ return (a.id||'')===(b.id||'') && (a.subject||'')===(b.subject||''); }
+    function isWeak(q){ return loadWeak().some(x=>isSameItem(x,q)); }
+    function setWeak(q, flag){
+      const list=loadWeak();
+      const idx=list.findIndex(x=>isSameItem(x,q));
+      if(flag){ if(idx<0){ list.push(q); } }
+      else { if(idx>=0){ list.splice(idx,1); } }
+      saveWeak(list); renderWeakTable();
+    }
+
+    // ボタン操作
+    document.getElementById('prevBtn').onclick=()=>{ if(state.curIdx>0){ state.curIdx--; showCurrent(); } };
+    document.getElementById('nextBtn').onclick=()=>{ const list=getRuntimeList(); if(state.curIdx<list.length-1){ state.curIdx++; showCurrent(); } };
+    document.getElementById('toggleWeak').onclick=(e)=>{ if(e.target.id==='weakChk') return; const chk=document.getElementById('weakChk'); chk.checked=!chk.checked; const q=getRuntimeList()[state.curIdx]; setWeak(q, chk.checked); };
+    document.getElementById('weakChk').onchange=(e)=>{ const q=getRuntimeList()[state.curIdx]; setWeak(q, e.target.checked); };
+
+    document.getElementById('btnHome').onclick=renderHome;
+    document.getElementById('btnWeak').onclick=()=>{ document.getElementById('homeView').classList.add('hidden'); document.getElementById('quizView').classList.add('hidden'); document.getElementById('weakView').classList.remove('hidden'); renderWeakTable(); };
+
+    // 弱点フィルタ & テーブル
+    function renderWeakTable(){
+      const all=loadWeak();
+      const subs=[...new Set(all.map(x=>x.subject).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ja'));
+      const sel=document.getElementById('weakFilter');
+      const cur=sel.value;
+      sel.innerHTML='<option value="">（すべての科目）</option>'+subs.map(s=>`<option ${s===cur?'selected':''}>${s}</option>`).join('');
+      const list=cur? all.filter(x=>x.subject===cur) : all;
+      const tb=document.querySelector('#weakTable tbody'); tb.innerHTML='';
+      list.forEach((q,i)=>{
+        const tr=document.createElement('tr');
+        const td=(t)=>{ const d=document.createElement('td'); d.textContent=t??''; return d };
+        tr.appendChild(td(q.subject)); tr.appendChild(td(q.unit)); tr.appendChild(td(q.question)); tr.appendChild(td(q.answer)); tr.appendChild(td(q.explanation));
+        const rm=document.createElement('td'); const b=document.createElement('button'); b.className='btn'; b.textContent='削除'; b.onclick=()=>{ const idx=all.findIndex(x=>isSameItem(x,q)); if(idx>=0){ all.splice(idx,1); saveWeak(all); renderWeakTable(); }}; rm.appendChild(b); tr.appendChild(rm);
+        tb.appendChild(tr);
+      });
+    }
+    document.getElementById('weakFilter').onchange=renderWeakTable;
+    document.getElementById('clearWeak').onclick=()=>{ if(confirm('苦手一覧をすべて削除しますか？')){ saveWeak([]); renderWeakTable(); } };
+
+    // エクスポート
+    function toCSV(rows){ if(!rows.length) return ''; const cols=Object.keys(rows[0]); const esc=v=>(''+(v??'')).replaceAll('"','""'); const head=cols.map(c=>'"'+esc(c)+'"').join(','); const body=rows.map(r=>cols.map(c=>'"'+esc(r[c])+'"').join(',')).join('
+'); return head+'
+'+body; }
+    document.getElementById('exportWeakCsv').onclick=()=>{ const csv=toCSV(loadWeak()); const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`weak_${state.sheetName}.csv`; a.click(); };
+
+    // プロンプト生成
+    document.getElementById('copyPrompt').onclick=()=>{
+      const items=loadWeak();
+      const brief = items.slice(0,20).map((q,i)=>`${i+1}. [${q.subject}] ${q.question}
+— 正解: ${q.answer}／解説: ${q.explanation}`).join('
+');
+      const prompt = `次の苦手問題の類題を、中学生向けのやさしい言葉＋ポケモン風のたとえで10問作ってください。\n\n${brief}`;
+      navigator.clipboard.writeText(prompt).then(()=>{ alert('プロンプトをコピーしました。ChatGPTに貼り付けてください。'); });
+    };
+
+    // 読み込み（URL or ファイル）
+    document.getElementById('loadBtn').onclick=async()=>{
+      const raw=document.getElementById('csvUrl').value.trim();
+      setSheetName(document.getElementById('sheetName').value);
+      state.settings.order=document.getElementById('orderMode').value; state.settings.limit=Number(document.getElementById('limitCount').value||0); saveSettings();
+      const url = toCsvUrl(raw);
+      try{
+        const res=await fetch(url);
+        if(!res.ok) throw new Error('CSV取得に失敗しました');
+        const text=await res.text();
+        onDataLoaded(parseCSV(text));
+      }catch(err){ alert('読み込みに失敗：'+err.message+'
+CSV公開（ウェブに公開）が有効か、URLを確認してください。'); }
+    };
+    document.getElementById('csvFile').onchange=async(e)=>{
+      const f=e.target.files[0]; if(!f) return;
+      setSheetName(document.getElementById('sheetName').value||f.name);
+      const text=await f.text(); onDataLoaded(parseCSV(text));
+    };
+
+    function onDataLoaded(rows){
+      const norm = (r)=>({ id: r.id??'', subject: r.subject||r.科目||'（未分類）', unit: r.unit||r.単元||'', question: r.question||r.問題||'', choice_a: r.choice_a||r.A||r.choiceA||'', choice_b: r.choice_b||r.B||r.choiceB||'', choice_c: r.choice_c||r.C||r.choiceC||'', choice_d: r.choice_d||r.D||r.choiceD||'', answer: (r.answer||r.正解||'').toString().trim(), explanation: r.explanation||r.解説||'' });
+      state.data = rows.map(norm).filter(r=>r.question);
+      const subs=[...new Set(state.data.map(r=>r.subject).filter(Boolean))];
+      state.subjects=subs.sort((a,b)=>a.localeCompare(b,'ja'));
+      state.bySubject={}; state.subjects.forEach(s=>{ state.bySubject[s]=state.data.filter(r=>r.subject===s); });
+      renderHome();
+      // 苦手フィルタの初期化
+      renderWeakTable();
+    }
+
+    // 便利：順序/出題数の即時反映
+    document.getElementById('orderMode').onchange=(e)=>{ state.settings.order=e.target.value; saveSettings(); };
+    document.getElementById('limitCount').onchange=(e)=>{ state.settings.limit=Number(e.target.value||0); saveSettings(); };
+
+    // テーマ/フォントUI
+    document.getElementById('themeToggle').onclick=()=>{ applyTheme(state.settings.theme==='light'?'dark':'light'); };
+    document.getElementById('fontSm').onclick=()=>{ applyFont((state.settings.fontScale||1)-0.1); };
+    document.getElementById('fontLg').onclick=()=>{ applyFont((state.settings.fontScale||1)+0.1); };
+
+    // 初期：URLパラメータから自動読み込み（?url=...&name=...）
+    try{
+      const p=new URLSearchParams(location.search);
+      const u=p.get('url'); const n=p.get('name'); const order=p.get('order'); const limit=p.get('limit'); const theme=p.get('theme');
+      if(n){ document.getElementById('sheetName').value=n; setSheetName(n); } else { setSheetName('default'); }
+      if(order){ document.getElementById('orderMode').value=order; state.settings.order=order; }
+      if(limit){ document.getElementById('limitCount').value=Number(limit)||0; state.settings.limit=Number(limit)||0; }
+      if(theme){ applyTheme(theme); }
+      if(u){ document.getElementById('csvUrl').value=u; document.getElementById('loadBtn').click(); }
+      else { loadSettings(); }
+    }catch{ setSheetName('default'); loadSettings(); }
+
+    function shuffle(arr){
+      for(let i=arr.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]]; }
+      return arr;
+    }
+  </script>
+</body>
+</html>
