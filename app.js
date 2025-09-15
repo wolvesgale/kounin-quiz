@@ -134,19 +134,23 @@ function startQuiz(sub) {
   var list = allData.filter(function(r){
     return (r.subject || r["科目"] || "") === sub;
   }).map(function(r){
-    return {
-      id: r.id || "",
-      subject: r.subject || r["科目"] || "",
-      unit: r.unit || r["単元"] || "",
-      question: r.question || r["問題"] || "",
-      a: r.choice_a || r.A || r.choiceA || r["A"] || "",
-      b: r.choice_b || r.B || r.choiceB || r["B"] || "",
-      c: r.choice_c || r.C || r.choiceC || r["C"] || "",
-      d: r.choice_d || r.D || r.choiceD || r["D"] || "",
-      answer: String(r.answer || r["正解"] || "").trim().toUpperCase(),
-      explanation: r.explanation || r["解説"] || ""
-    };
-  });
+  return {
+    id: r.id || "",
+    subject: r.subject || r["科目"] || "",
+    unit: r.unit || r["単元"] || "",
+    question: r.question || r["問題"] || "",
+    a: r.choice_a || r.A || r.choiceA || r["A"] || "",
+    b: r.choice_b || r.B || r.choiceB || r["B"] || "",
+    c: r.choice_c || r.C || r.choiceC || r["C"] || "",
+    d: r.choice_d || r.D || r.choiceD || r["D"] || "",
+    answer: String(r.answer || r["正解"] || "").trim().toUpperCase(),
+    explanation: r.explanation || r["解説"] || "",
+    // ↓ 追加（あれば使う）
+    explanation_long: r.explanation_long || r["詳しい解説"] || "",
+    img_url: r.img_url || r["画像URL"] || ""
+  };
+});
+
 
   if (settings.order === "random") list = shuffle(list);
   var lim = parseInt($("limit").value || "0", 10);
@@ -219,6 +223,31 @@ function renderQuizList(list, sub) {
     cont.appendChild(card);
   });
 }
+
+// 画像（任意）
+if (q.img_url) {
+  var img = document.createElement("img");
+  img.src = q.img_url;
+  img.alt = "illustration";
+  img.style.maxWidth = "100%";
+  img.style.borderRadius = "8px";
+  img.style.marginTop = "6px";
+  card.appendChild(img);
+}
+
+// もっと詳しく（任意）
+if (q.explanation_long) {
+  var more = document.createElement("details");
+  var sum = document.createElement("summary");
+  sum.textContent = "もっと詳しい解説（中3向け）";
+  more.appendChild(sum);
+  var p = document.createElement("div");
+  p.textContent = q.explanation_long;
+  p.style.marginTop = "6px";
+  more.appendChild(p);
+  card.appendChild(more);
+}
+
 
 function renderWeak() {
   var arr = loadWeak();
